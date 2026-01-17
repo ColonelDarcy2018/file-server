@@ -1,0 +1,2 @@
+# No external dependencies.
+# Requires Python >= 3.11 (see pyproject.toml).

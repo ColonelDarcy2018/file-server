@@ -1,0 +1,5 @@
+[project]
+name = "d-file-server"
+version = "0.1.0"
+description = "Simple LAN file server rooted at D drive"
+requires-python = ">=3.11"
