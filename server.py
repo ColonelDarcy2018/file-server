@@ -3,7 +3,6 @@ import datetime as dt
 import html
 import mimetypes
 import pathlib
-import shutil
 import socketserver
 import sys
 import urllib.parse
@@ -13,6 +12,16 @@ from http.server import BaseHTTPRequestHandler
 
 DEFAULT_ROOT = r"D:\\"
 MAX_PREVIEW_BYTES = 1_000_000
+EXTRA_MIME_TYPES = {
+    ".mkv": "video/x-matroska",
+    ".mp4": "video/mp4",
+    ".m4v": "video/mp4",
+    ".mov": "video/quicktime",
+    ".avi": "video/x-msvideo",
+    ".wmv": "video/x-ms-wmv",
+    ".webm": "video/webm",
+    ".flv": "video/x-flv",
+}
 
 
 def format_size(size):
@@ -37,6 +46,18 @@ def is_text_type(mime_type, suffix):
     if mime_type in {"application/json", "application/xml"}:
         return True
     return suffix in {".txt", ".md", ".py", ".log", ".csv", ".ini", ".cfg", ".yaml", ".yml"}
+
+
+def is_media_type(mime_type):
+    return bool(
+        mime_type
+        and (
+            mime_type.startswith("image/")
+            or mime_type.startswith("audio/")
+            or mime_type.startswith("video/")
+            or mime_type == "application/pdf"
+        )
+    )
 
 
 class ThreadingHTTPServer(socketserver.ThreadingTCPServer):
@@ -136,7 +157,7 @@ def make_handler(root_path, max_preview_bytes):
             details = f"<div class='meta'>Size: {format_size(stat.st_size)} | Modified: {file_mtime(stat)}</div>"
             back = f'<div class="back"><a href="/browse?path={urllib.parse.quote(self.parent_rel(rel))}">Back</a></div>'
 
-            if stat.st_size > max_preview_bytes and not is_text_type(mime_type, suffix):
+            if stat.st_size > max_preview_bytes and not is_text_type(mime_type, suffix) and not is_media_type(mime_type):
                 body = f"""
 <h1>{html.escape(target.name)}</h1>
 {details}
@@ -242,19 +263,46 @@ def make_handler(root_path, max_preview_bytes):
             mime_type, _ = mimetypes.guess_type(str(path))
             content_type = mime_type or "application/octet-stream"
             size = path.stat().st_size
+            disposition = "attachment" if as_attachment else "inline"
+            filename = path.name.replace('"', "")
+            ascii_filename = self.ascii_filename(filename, path.suffix)
+            quoted = urllib.parse.quote(filename)
+            range_header = self.headers.get("Range")
+            if range_header:
+                byte_range = self.parse_range(range_header, size)
+                if not byte_range:
+                    self.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                    self.send_header("Content-Range", f"bytes */{size}")
+                    self.end_headers()
+                    return
+                start, end = byte_range
+                length = end - start + 1
+                self.send_response(HTTPStatus.PARTIAL_CONTENT)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Length", str(length))
+                self.send_header("Accept-Ranges", "bytes")
+                self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+                self.send_header(
+                    "Content-Disposition",
+                    f"{disposition}; filename=\"{ascii_filename}\"; filename*=UTF-8''{quoted}",
+                )
+                self.end_headers()
+                with path.open("rb") as fh:
+                    fh.seek(start)
+                    self.copy_bytes(fh, length)
+                return
+
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(size))
-            disposition = "attachment" if as_attachment else "inline"
-            filename = path.name.replace('"', "")
-            quoted = urllib.parse.quote(filename)
+            self.send_header("Accept-Ranges", "bytes")
             self.send_header(
                 "Content-Disposition",
-                f"{disposition}; filename=\"{filename}\"; filename*=UTF-8''{quoted}",
+                f"{disposition}; filename=\"{ascii_filename}\"; filename*=UTF-8''{quoted}",
             )
             self.end_headers()
             with path.open("rb") as fh:
-                shutil.copyfileobj(fh, self.wfile)
+                self.copy_bytes(fh, size)
 
         def write_html(self, title, body):
             html_doc = f"""<!doctype html>
@@ -360,6 +408,64 @@ def make_handler(root_path, max_preview_bytes):
             self.end_headers()
             self.wfile.write(data)
 
+        def ascii_filename(self, filename, suffix):
+            cleaned = []
+            for ch in filename:
+                code = ord(ch)
+                if 32 <= code <= 126 and ch not in {'"', "\\"}:
+                    cleaned.append(ch)
+                else:
+                    cleaned.append("_")
+            ascii_name = "".join(cleaned).strip()
+            if not ascii_name or ascii_name.strip("_") == "":
+                safe_suffix = suffix if suffix and all(32 <= ord(c) <= 126 for c in suffix) else ""
+                return f"file{safe_suffix}"
+            return ascii_name
+
+        def parse_range(self, header, size):
+            if not header.startswith("bytes="):
+                return None
+            range_spec = header[len("bytes="):].split(",")[0].strip()
+            if "-" not in range_spec:
+                return None
+            start_str, end_str = range_spec.split("-", 1)
+            try:
+                if start_str == "":
+                    end = int(end_str)
+                    if end <= 0:
+                        return None
+                    if end > size:
+                        end = size
+                    return size - end, size - 1
+                start = int(start_str)
+                if start < 0:
+                    return None
+                if end_str == "":
+                    end = size - 1
+                else:
+                    end = int(end_str)
+                if end < start:
+                    return None
+                if start >= size:
+                    return None
+                if end >= size:
+                    end = size - 1
+                return start, end
+            except ValueError:
+                return None
+
+        def copy_bytes(self, fh, length, chunk_size=64 * 1024):
+            remaining = length
+            while remaining > 0:
+                chunk = fh.read(min(chunk_size, remaining))
+                if not chunk:
+                    break
+                try:
+                    self.wfile.write(chunk)
+                except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+                    break
+                remaining -= len(chunk)
+
         def redirect(self, target):
             self.send_response(HTTPStatus.FOUND)
             self.send_header("Location", target)
@@ -385,6 +491,8 @@ def main():
         sys.exit(1)
 
     mimetypes.init()
+    for ext, mime in EXTRA_MIME_TYPES.items():
+        mimetypes.add_type(mime, ext, strict=False)
     handler = make_handler(root, args.max_preview_bytes)
     with ThreadingHTTPServer((args.host, args.port), handler) as httpd:
         print(f"Serving {root} at http://{args.host}:{args.port}")
