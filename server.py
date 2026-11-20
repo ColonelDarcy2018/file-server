@@ -5,12 +5,13 @@ import mimetypes
 import pathlib
 import socketserver
 import sys
+import threading
 import urllib.parse
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
 
 
-DEFAULT_ROOT = r"D:\\"
+DEFAULT_ROOT = str(pathlib.Path.home())
 MAX_PREVIEW_BYTES = 1_000_000
 EXTRA_MIME_TYPES = {
     ".mkv": "video/x-matroska",
@@ -65,11 +66,98 @@ class ThreadingHTTPServer(socketserver.ThreadingTCPServer):
     daemon_threads = True
 
 
-def make_handler(root_path, max_preview_bytes):
-    root_path = root_path.resolve()
+class ServerState:
+    def __init__(self, root):
+        self.root = pathlib.Path(root).resolve()
 
+    @property
+    def label(self):
+        if self.root.parent == self.root:
+            return str(self.root)
+        return self.root.name or str(self.root)
+
+
+class FileServer:
+    def __init__(self, root, host="0.0.0.0", port=8000, max_preview_bytes=MAX_PREVIEW_BYTES):
+        candidate = pathlib.Path(root)
+        if not candidate.is_dir():
+            raise ValueError(f"Root path not found: {candidate}")
+        register_mime_types()
+        self.state = ServerState(candidate)
+        self.host = host
+        self.port = port
+        self.max_preview_bytes = max_preview_bytes
+        self._httpd = None
+        self._thread = None
+
+    @property
+    def running(self):
+        return self._thread is not None and self._thread.is_alive()
+
+    @property
+    def root(self):
+        return self.state.root
+
+    @property
+    def address(self):
+        if self._httpd is None:
+            return None
+        return self._httpd.server_address
+
+    def set_root(self, root):
+        candidate = pathlib.Path(root)
+        if not candidate.is_dir():
+            raise ValueError(f"Root path not found: {candidate}")
+        self.state.root = candidate.resolve()
+        return self.state.root
+
+    def start(self):
+        if self.running:
+            return
+        handler = make_handler(self.state, self.max_preview_bytes)
+        httpd = ThreadingHTTPServer((self.host, self.port), handler)
+        self._httpd = httpd
+        self._thread = threading.Thread(target=httpd.serve_forever, name="file-server", daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        httpd, thread = self._httpd, self._thread
+        self._httpd = None
+        self._thread = None
+        if httpd is None:
+            return
+        httpd.shutdown()
+        httpd.server_close()
+        if thread is not None:
+            thread.join(timeout=5)
+
+    def serve_forever(self):
+        handler = make_handler(self.state, self.max_preview_bytes)
+        with ThreadingHTTPServer((self.host, self.port), handler) as httpd:
+            self._httpd = httpd
+            httpd.serve_forever()
+
+
+_MIME_READY = False
+
+
+def register_mime_types():
+    global _MIME_READY
+    if _MIME_READY:
+        return
+    mimetypes.init()
+    for ext, mime in EXTRA_MIME_TYPES.items():
+        mimetypes.add_type(mime, ext, strict=False)
+    _MIME_READY = True
+
+
+def make_handler(state, max_preview_bytes):
     class FileServerHandler(BaseHTTPRequestHandler):
         server_version = "DFileServer/1.0"
+
+        @property
+        def root_path(self):
+            return state.root
 
         def do_GET(self):
             parsed = urllib.parse.urlparse(self.path)
@@ -125,7 +213,7 @@ def make_handler(root_path, max_preview_bytes):
             breadcrumb = self.render_breadcrumb(rel)
             body = f"""
 <div class="header">
-  <h1>Drive D file server</h1>
+  <h1>File server</h1>
   <div class="crumbs">{breadcrumb}</div>
 </div>
 <table>
@@ -221,10 +309,11 @@ def make_handler(root_path, max_preview_bytes):
             return "<p>No inline preview available for this file type.</p>"
 
         def render_breadcrumb(self, rel):
+            root_label = html.escape(state.label)
             if not rel:
-                return "D:\\"
+                return root_label
             parts = [p for p in rel.replace("\\", "/").split("/") if p]
-            crumbs = ['<a href="/browse">D:\\</a>']
+            crumbs = [f'<a href="/browse">{root_label}</a>']
             current = ""
             for part in parts:
                 current = f"{current}/{part}" if current else part
@@ -238,7 +327,7 @@ def make_handler(root_path, max_preview_bytes):
             return "/".join(parts[:-1])
 
         def rel_from_root(self, target):
-            return str(target.relative_to(root_path)).replace("\\", "/")
+            return str(target.relative_to(self.root_path)).replace("\\", "/")
 
         def get_rel_path(self, parsed):
             params = urllib.parse.parse_qs(parsed.query)
@@ -246,15 +335,16 @@ def make_handler(root_path, max_preview_bytes):
             return rel.replace("\\", "/")
 
         def safe_path(self, rel):
+            root = self.root_path
             rel = rel.strip().replace("\\", "/")
             if not rel:
-                return root_path
+                return root
             rel_path = pathlib.Path(rel)
             if rel_path.is_absolute() or rel_path.drive or ":" in rel:
                 return None
-            candidate = (root_path / rel_path).resolve(strict=False)
+            candidate = (root / rel_path).resolve(strict=False)
             try:
-                candidate.relative_to(root_path)
+                candidate.relative_to(root)
             except ValueError:
                 return None
             return candidate
@@ -478,25 +568,24 @@ def make_handler(root_path, max_preview_bytes):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Simple LAN file server for Drive D")
-    parser.add_argument("--root", default=DEFAULT_ROOT, help="Root folder to serve (default: D:\\)")
+    parser = argparse.ArgumentParser(description="Simple LAN file server")
+    parser.add_argument("--root", default=DEFAULT_ROOT, help=f"Root folder to serve (default: {DEFAULT_ROOT})")
     parser.add_argument("--host", default="0.0.0.0", help="Host to bind (default: 0.0.0.0)")
     parser.add_argument("--port", type=int, default=8000, help="Port to bind (default: 8000)")
     parser.add_argument("--max-preview-bytes", type=int, default=MAX_PREVIEW_BYTES, help="Max bytes for text preview")
     args = parser.parse_args()
 
-    root = pathlib.Path(args.root)
-    if not root.exists() or not root.is_dir():
-        print(f"Root path not found: {root}")
+    try:
+        file_server = FileServer(args.root, args.host, args.port, args.max_preview_bytes)
+    except ValueError as exc:
+        print(exc)
         sys.exit(1)
 
-    mimetypes.init()
-    for ext, mime in EXTRA_MIME_TYPES.items():
-        mimetypes.add_type(mime, ext, strict=False)
-    handler = make_handler(root, args.max_preview_bytes)
-    with ThreadingHTTPServer((args.host, args.port), handler) as httpd:
-        print(f"Serving {root} at http://{args.host}:{args.port}")
-        httpd.serve_forever()
+    print(f"Serving {file_server.root} at http://{args.host}:{args.port}")
+    try:
+        file_server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nStopped")
 
 
 if __name__ == "__main__":

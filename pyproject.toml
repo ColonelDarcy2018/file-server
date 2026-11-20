@@ -1,5 +1,15 @@
 [project]
 name = "d-file-server"
 version = "0.1.0"
-description = "Simple LAN file server rooted at D drive"
+description = "A small LAN file server with a desktop control panel and tray support"
+readme = "README.md"
+license = { text = "MIT" }
 requires-python = ">=3.11"
+dependencies = [
+    "pillow>=10.0",
+    "pystray>=0.19",
+]
+
+[project.urls]
+Homepage = "https://github.com/ColonelDarcy2018/d-file-server"
+Repository = "https://github.com/ColonelDarcy2018/d-file-server"

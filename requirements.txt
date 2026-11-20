@@ -1,2 +1,4 @@
-# No external dependencies.
 # Requires Python >= 3.11 (see pyproject.toml).
+# GUI control panel (gui.py) needs these for the system tray icon.
+pillow>=10.0
+pystray>=0.19

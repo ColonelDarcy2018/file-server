@@ -1,69 +1,106 @@
-# D Drive File Server
+# D File Server
 
-Simple LAN file server rooted at `D:\` with browse, preview, and download.
+**English** | [简体中文](README.zh-CN.md)
 
-## Run
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
+[![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D6.svg)](#requirements)
+
+A tiny, read-only LAN file server for Windows. Share a folder, then browse,
+preview, and download files from any browser on your network. The desktop
+control panel can start and stop the server, switch the shared folder at
+runtime, and minimize to the system tray.
+
+## Features
+
+- Browse folders, preview files, and download them from a browser
+- Inline previews for images, audio, video, PDF, and small text files
+- HTTP Range support for seeking and streaming large media files
+- Read-only: no upload, delete, or rename endpoints
+- Desktop control panel with start/stop, host/port, and live root switching
+- System tray: close or minimize the window and keep serving in the background
+- Settings persisted in `%APPDATA%\DFileServer\config.json`
+- No dependencies for the CLI server (Python standard library only); the GUI
+  needs Pillow and pystray
+
+![Desktop control panel](docs/control-panel.png)
+
+## Requirements
+
+- Python 3.11 or newer
+- Windows 10/11 for the desktop control panel and tray icon (the CLI server is
+  platform-independent)
+
+## Quick start
 
 ```powershell
-python .\server.py
-```
-
-Then open:
-
-```
-http://<your-lan-ip>:8000
-```
-
-## Options
-
-```powershell
-python .\server.py --root D:\ --host 0.0.0.0 --port 8000 --max-preview-bytes 1000000
-```
-
-Notes:
-- `--host 0.0.0.0` makes it reachable on the LAN.
-- If Windows Firewall blocks access, allow inbound traffic on the chosen port.
-
-## uv setup
-
-1) Install uv (one-time):
-
-```powershell
-winget install --id Astral.Uv
-```
-
-2) Create and activate a virtual environment:
-
-```powershell
+git clone https://github.com/ColonelDarcy2018/d-file-server.git
+cd d-file-server
 uv venv
-.\.venv\Scripts\activate
+uv pip install -r requirements.txt
+.\.venv\Scripts\pythonw.exe .\gui.py
 ```
 
-3) Run the server:
+Use `python.exe` instead of `pythonw.exe` if you want a console with logs.
+
+If you only need the command-line server:
 
 ```powershell
-python .\server.py
+python .\server.py --root "E:\"
 ```
 
-If you add dependencies later:
+The default share root is your user profile. The GUI remembers the last root,
+host, and port in `%APPDATA%\DFileServer\config.json`.
 
-```powershell
-uv pip install <package>
+### Firewall
+
+To reach the server from other devices, allow inbound TCP traffic on the chosen
+port (8000 by default) in Windows Firewall.
+
+## Desktop control panel
+
+- **Start / Stop** toggles the HTTP server.
+- **Browse / Apply** picks a folder. While the server is running, applying a
+  new folder takes effect immediately without a restart.
+- **Open in browser** opens the LAN URL.
+- **Minimize to tray** hides the window; with the tray option checked, closing
+  or minimizing the window also keeps the server running in the background.
+  Double-click the tray icon to restore the window. The tray menu can also
+  start/stop the server and exit.
+
+## CLI options
+
+```text
+usage: server.py [-h] [--root ROOT] [--host HOST] [--port PORT]
+                 [--max-preview-bytes MAX_PREVIEW_BYTES]
 ```
 
-## Build exe (Windows)
+| Option | Default | Description |
+| --- | --- | --- |
+| `--root` | user home | Folder to serve |
+| `--host` | `0.0.0.0` | Bind address; use `127.0.0.1` for local-only access |
+| `--port` | `8000` | TCP port |
+| `--max-preview-bytes` | `1000000` | Max size for inline text previews |
+
+## Build Windows executables
 
 ```powershell
 .\build.ps1
 ```
 
-Output:
+Outputs:
 
+- `dist\d-file-server.exe` — console/CLI server
+- `dist\d-file-server-gui.exe` — windowed control panel with tray support
+
+## Project layout
+
+```text
+server.py        HTTP server, browsing, preview, and download
+gui.py           Tkinter control panel and system tray
+build.ps1        PyInstaller build script
 ```
-dist\d-file-server.exe
-```
 
-## Git tips
+## License
 
-- Keep `.venv/`, `dist/`, and `build/` out of Git (see `.gitignore`).
-- The repo normalizes text files via `.gitattributes`.
+[MIT](LICENSE)
