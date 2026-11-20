@@ -1,4 +1,4 @@
-# D File Server
+# File Server
 
 **English** | [简体中文](README.zh-CN.md)
 
@@ -34,8 +34,8 @@ runtime, and minimize to the system tray.
 ## Quick start
 
 ```powershell
-git clone https://github.com/ColonelDarcy2018/d-file-server.git
-cd d-file-server
+git clone https://github.com/ColonelDarcy2018/file-server.git
+cd file-server
 uv venv
 uv pip install -r requirements.txt
 .\.venv\Scripts\pythonw.exe .\gui.py

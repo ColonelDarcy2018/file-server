@@ -11,5 +11,5 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/ColonelDarcy2018/d-file-server"
-Repository = "https://github.com/ColonelDarcy2018/d-file-server"
+Homepage = "https://github.com/ColonelDarcy2018/file-server"
+Repository = "https://github.com/ColonelDarcy2018/file-server"

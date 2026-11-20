@@ -1,4 +1,4 @@
-# D File Server
+# File Server
 
 [English](README.md) | **简体中文**
 
@@ -31,8 +31,8 @@
 ## 快速开始
 
 ```powershell
-git clone https://github.com/ColonelDarcy2018/d-file-server.git
-cd d-file-server
+git clone https://github.com/ColonelDarcy2018/file-server.git
+cd file-server
 uv venv
 uv pip install -r requirements.txt
 .\.venv\Scripts\pythonw.exe .\gui.py
