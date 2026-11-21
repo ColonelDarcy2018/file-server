@@ -3,6 +3,7 @@ import os
 import pathlib
 import queue
 import socket
+import sys
 import webbrowser
 
 import tkinter as tk
@@ -13,6 +14,25 @@ import server as file_server
 APP_NAME = "File Server"
 CONFIG_DIR = pathlib.Path(os.environ.get("APPDATA") or pathlib.Path.home()) / "DFileServer"
 CONFIG_PATH = CONFIG_DIR / "config.json"
+
+
+def ensure_std_streams():
+    # Windowed builds have no console: stdout/stderr are None, and any library
+    # writing to them (http.server logging, traceback hooks) would crash.
+    if sys.stdout is not None and sys.stderr is not None:
+        return
+    try:
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        stream = open(CONFIG_DIR / "gui.log", "a", encoding="utf-8", buffering=1)
+    except OSError:
+        stream = open(os.devnull, "w")
+    if sys.stdout is None:
+        sys.stdout = stream
+    if sys.stderr is None:
+        sys.stderr = stream
+
+
+ensure_std_streams()
 
 try:
     import pystray

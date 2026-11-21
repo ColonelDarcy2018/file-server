@@ -192,15 +192,23 @@ def make_handler(state, max_preview_bytes):
                 self.send_error(HTTPStatus.FORBIDDEN, "Access denied")
                 return
 
-            entries.sort(key=lambda p: (not p.is_dir(), p.name.lower()))
+            items = []
             for entry in entries:
+                try:
+                    is_dir = entry.is_dir()
+                    stat = entry.stat()
+                except OSError:
+                    continue
+                items.append((not is_dir, entry.name.lower(), entry, is_dir, stat))
+            items.sort(key=lambda item: (item[0], item[1]))
+
+            for _, _, entry, is_dir, stat in items:
                 rel_entry = self.rel_from_root(entry)
-                stat = entry.stat()
                 name = html.escape(entry.name)
-                size = "-" if entry.is_dir() else format_size(stat.st_size)
+                size = "-" if is_dir else format_size(stat.st_size)
                 mtime = file_mtime(stat)
-                link = f"/browse?path={urllib.parse.quote(rel_entry)}" if entry.is_dir() else f"/preview?path={urllib.parse.quote(rel_entry)}"
-                download = "" if entry.is_dir() else f'<a class="action" href="/download?path={urllib.parse.quote(rel_entry)}">download</a>'
+                link = f"/browse?path={urllib.parse.quote(rel_entry)}" if is_dir else f"/preview?path={urllib.parse.quote(rel_entry)}"
+                download = "" if is_dir else f'<a class="action" href="/download?path={urllib.parse.quote(rel_entry)}">download</a>'
                 rows.append(
                     "<tr>"
                     f'<td><a class="name" href="{link}">{name}</a></td>'
