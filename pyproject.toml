@@ -1,6 +1,6 @@
 [project]
-name = "d-file-server"
-version = "0.1.0"
+name = "file-server"
+version = "0.1.1"
 description = "A small LAN file server with a desktop control panel and tray support"
 readme = "README.md"
 license = { text = "MIT" }

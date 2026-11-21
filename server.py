@@ -153,7 +153,7 @@ def register_mime_types():
 
 def make_handler(state, max_preview_bytes):
     class FileServerHandler(BaseHTTPRequestHandler):
-        server_version = "DFileServer/1.0"
+        server_version = "FileServer/1.0"
 
         @property
         def root_path(self):

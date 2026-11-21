@@ -90,8 +90,8 @@ usage: server.py [-h] [--root ROOT] [--host HOST] [--port PORT]
 
 Outputs:
 
-- `dist\d-file-server.exe` — console/CLI server
-- `dist\d-file-server-gui.exe` — windowed control panel with tray support
+- `dist\file-server.exe` — console/CLI server
+- `dist\file-server-gui.exe` — windowed control panel with tray support
 
 ## Project layout
 

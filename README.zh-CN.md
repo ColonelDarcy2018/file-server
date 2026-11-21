@@ -84,8 +84,8 @@ usage: server.py [-h] [--root ROOT] [--host HOST] [--port PORT]
 
 输出：
 
-- `dist\d-file-server.exe` — 控制台/CLI 服务器
-- `dist\d-file-server-gui.exe` — 带托盘功能的图形控制面板
+- `dist\file-server.exe` — 控制台/CLI 服务器
+- `dist\file-server-gui.exe` — 带托盘功能的图形控制面板
 
 ## 项目结构
 
